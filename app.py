@@ -47,7 +47,7 @@ if 'page' not in st.session_state: st.session_state.page = 'main_select'
 if 'selected_mains' not in st.session_state: st.session_state.selected_mains = set()
 if 'selected_subs' not in st.session_state: st.session_state.selected_subs = set()
 
-# 🌟 업데이트: 소분야별 개별 주기를 관리할 딕셔너리 세션 생성
+# 소분야별 개별 주기를 관리할 딕셔너리 세션
 if 'quest_cycles' not in st.session_state: st.session_state.quest_cycles = {}
 
 # 영단어 시간차 분리 시스템용 세션
@@ -66,25 +66,36 @@ if 'coding_level' not in st.session_state: st.session_state.coding_level = {}
 
 
 # ==========================================
-# 🔑 공통 모듈: 사이드바 AI 설정
+# 🔑 1순위 Secrets 자동 연동 및 사이드바 예외 처리 고도화
 # ==========================================
+secret_key = st.secrets.get("api_key", "")
+
 with st.sidebar:
     st.header("⚙️ AI 멘토 설정")
-    api_key = st.text_input("Gemini API Key를 입력하세요", type="password")
-    if api_key:
-        genai.configure(api_key=api_key)
-        st.success("API 연결 완료!")
+    if secret_key:
+        st.success("🔒 클라우드 Secrets 연동 완료!\n(키를 따로 입력하지 않아도 됩니다)")
+        api_key = secret_key
     else:
-        st.warning("퀘스트를 생성하려면 API 키가 필요합니다.")
+        api_key = st.text_input("Gemini API Key를 입력하세요", type="password")
+        if api_key:
+            st.success("API 연결 완료!")
+        else:
+            st.warning("퀘스트를 생성하려면 API 키가 필요합니다.")
     st.markdown("---")
     st.caption("제작: 멋진 AI 퀘스트 기획자")
 
+# 최종 확보된 키로 제미나이 설정 구동
+if api_key:
+    genai.configure(api_key=api_key)
+
 
 # ==========================================
-# 🧠 AI 생성 로직 함수들 (복기한 프롬프트 정밀 고도화)
+# 🧠 AI 생성 로직 함수들
 # ==========================================
 def get_ai_response(prompt):
-    if not api_key: return None
+    if not api_key: 
+        st.error("API 키가 설정되지 않았습니다. 사이드바 혹은 Secrets를 확인해 주세요.")
+        return None
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
@@ -95,7 +106,6 @@ def get_ai_response(prompt):
         return None
 
 def generate_vocab_quest(level):
-    # 📌 복기 반영: 토익(TOEIC) 필수 어휘 및 IT/전자공학 실무 기술 전문 용어(Technical Terms) 중심 타겟팅
     prompt = f"""
     영어 교육 전문가이자 공학 기술 영어 멘토입니다. 토익(TOEIC) 필수 고득점 어휘와 IT·전자공학 분야의 기술 전문 용어(Technical Terms)가 혼합된 {level} 수준의 필수 영단어 5개와 이를 완벽히 외웠는지 검증할 미니 퀴즈 3문항을 생성하세요. 
     반드시 JSON 형식으로 답변:
@@ -104,6 +114,9 @@ def generate_vocab_quest(level):
     return get_ai_response(prompt)
 
 def generate_workout_quest(sub, level, location):
+    prompt = f"""
+    ... (중략: 프롬프트 동일) ...
+    """
     prompt = f"""
     베테랑 트레이너입니다. 종목:{sub}, 수준:{level}, 장소:{location}에 맞는 운동 루틴을 생성하세요. 
     (집인 경우 절대 기구 추가 없이 맨몸운동만 구성)
@@ -129,7 +142,6 @@ def recommend_book_quest(sub, level):
     return get_ai_response(prompt)
 
 def generate_premium_news(sub):
-    # 📌 복기 반영: 일반 뉴스를 배제하고 AI, 반도체, 대형 테크주(MS, Alphabet, Netflix 등)와 이란-미국 갈등 같은 지정학적 리스크 분석 매칭
     prompt = f"""
     글로벌 금융 및 빅테크 테크 수석 분석가입니다. '{sub}' 분야 및 거시경제 지표와 관련하여, 특히 인공지능(AI), 반도체, 미국 대형 테크주(Microsoft, Alphabet, Netflix)의 최신 핵심 이슈와 이란-미국 전쟁 상황 등 지정학적 리스크가 유가 및 글로벌 공급망에 미치는 나비효과를 집중 분석한 최고급 VIP 브리핑 리포트를 작성하세요.
     반드시 JSON 형식으로 답변:
@@ -146,7 +158,6 @@ def get_coding_test_paper(sub):
     return get_ai_response(prompt)
 
 def generate_daily_coding_quest(sub, level):
-    # 📌 복기 반영: <새내기 파이썬> 진도(리스트, 조건문 기본기 등) 연계 및 '개인 주식 포트폴리오 관리 시스템 구축' 프로젝트 확장
     prompt = f"""
     전공 프로그래밍 시니어 멘토입니다. 만약 종목이 '파이썬'인 경우, 교재 <새내기 파이썬>의 진도 범위(리스트 구조 제어, 조건문 논리 설계 등)를 적극 반영하고, 장기적으로 나만의 '개인 주식 포트폴리오 관리 시스템'을 직접 구현하는 데 도움이 되는 연계 미션을 출제해야 합니다. 전공자들이 코드 작성 시 예외를 만들어내거나 실수하기 쉬운 치명적인 '주의할 함정/에러 개념'을 상세히 설명하세요.
     '{sub}' 언어의 '{level}' 수준에 맞춤형 답변을 만드세요.
@@ -163,7 +174,6 @@ def display_vocab_section(sub):
     st.subheader(f"🌍 {sub} 퀘스트")
     level = st.selectbox(f"{sub} 나의 수준", ["초급", "중급", "고급"], key=f"lvl_{sub}")
     
-    # 🌟 업데이트: 영단어 파트 '학습장 선발급(다운로드) - 3시간 타임락 - 퀴즈 오픈' 프로세스 구현
     if sub == "영단어":
         if st.button(f"☀️ 1단계: 오늘자 맞춤형 단어장 발급받기", key=f"btn_{sub}_step1"):
             with st.spinner("토익 및 IT 공학 기술 영단어를 취합하여 문서를 구성 중..."):
@@ -206,7 +216,6 @@ def display_vocab_section(sub):
                 for i, q in enumerate(data['quizzes']):
                     st.radio(f"Q{i+1}. {q['question']}", q['options'], key=f"quiz_{sub}_{i}")
     else:
-        # 리스닝, 독해 항목은 기존 정체성 유지
         if st.button(f"✨ 이번 주기 {sub} 퀘스트 생성", key=f"btn_{sub}"):
             with st.spinner("AI가 과제를 빌드하고 있습니다..."):
                 data = generate_vocab_quest(level)
@@ -263,7 +272,6 @@ def display_reading_section(sub):
 def display_affairs_section(sub):
     st.subheader(f"📰 {sub} 프리미엄 브리핑")
     
-    # 🌟 업데이트: 한국 시간(KST) 오전 8시 기준 타임 릴리즈 잠금장치 반영
     kst_now = get_kst_now()
     is_after_8am = kst_now.hour >= 8
     
@@ -285,7 +293,6 @@ def display_affairs_section(sub):
             st.markdown("### 🚀 Future Impact (향후 시장 파급 효과)")
             st.info(data['future_impact'])
             
-            # 파일 소장을 원하는 니즈 적극 충족
             report_text = f"=== {data['headline']} ===\n\n[요약]\n{data['executive_summary']}\n\n[Deep Dive]\n{data['deep_dive']}\n\n[Future Impact]\n{data['future_impact']}"
             st.download_button("📥 브리핑 리포트 파일(.txt) 다운로드", data=report_text, file_name=f"VIP_Report_{sub}_{kst_now.strftime('%Y%m%d')}.txt", use_container_width=True)
     else:
@@ -294,7 +301,6 @@ def display_affairs_section(sub):
 def display_coding_section(sub):
     st.subheader(f"💻 {sub} 역량 퀘스트")
     
-    # 1. 레벨 테스트가 없는 경우 (네 원본 설계 로직 100% 보존)
     if sub not in st.session_state.coding_level:
         st.write("📌 실력 진단 테스트(10문항)가 필요합니다.")
         if sub not in st.session_state.coding_test_questions:
@@ -328,7 +334,6 @@ def display_coding_section(sub):
                     st.session_state.coding_level[sub] = lvl
                     st.rerun()
                         
-    # 2. 레벨이 고정된 경우 (퀘스트 진행)
     else:
         lvl = st.session_state.coding_level[sub]
         st.write(f"현재 등급: **[{lvl}]**")
@@ -343,10 +348,10 @@ def display_coding_section(sub):
 
 
 # ==========================================
-# 🚀 메인 앱 흐름 (라우터 구조 그대로 유지)
+# 🚀 메인 앱 흐름 (라우터 구조)
 # ==========================================
 
-# [화면 0] 🌟 나의 대시보드 (설정 완료 후 고정)
+# [화면 0] 🌟 나의 대시보드
 if st.session_state.is_setup_complete:
     col1, col2 = st.columns([4, 1])
     with col1:
@@ -359,7 +364,6 @@ if st.session_state.is_setup_complete:
             
     st.markdown("---")
     
-    # 🌟 업데이트: 각 서브 분류 카테고리 옆에 개별 설정한 주기가 동적으로 표시되도록 바인딩
     for sub in st.session_state.selected_subs:
         main_cat = SUB_TO_MAIN[sub]
         sub_cycle = st.session_state.quest_cycles.get(sub, 1)
@@ -375,7 +379,7 @@ if st.session_state.is_setup_complete:
             st.markdown("---")
             st.checkbox(f"✅ 이번 주기 '{sub}' 퀘스트 완료!", key=f"done_{sub}")
 
-# [화면 1] 온보딩 1단계: 대분류 선택 (네 원본 파일 그대로 보존)
+# [화면 1] 온보딩 1단계: 대분류 선택
 elif st.session_state.page == 'main_select':
     st.title("🎯 대분류 카테고리 선택")
     st.write("관심 있는 분야를 모두 골라주세요.")
@@ -396,11 +400,10 @@ elif st.session_state.page == 'main_select':
             st.session_state.page = 'sub_select'
             st.rerun()
 
-# [화면 2] 온보딩 2단계: 소분류 선택 및 주기(Cycle) 개별 설정 분리 고도화
+# [화면 2] 온보딩 2단계: 소분류 선택 및 주기(Cycle) 개별 설정
 elif st.session_state.page == 'sub_select':
     st.title("🔍 세부 종목 및 주기 설정")
     
-    # 선택된 카테고리별 소분류 버튼
     for main_cat in st.session_state.selected_mains:
         st.subheader(f"{MAIN_CATS[main_cat]} {main_cat}")
         sub_dict = SUB_CATS[main_cat]
@@ -417,16 +420,14 @@ elif st.session_state.page == 'sub_select':
                             del st.session_state.quest_cycles[sub_name]
                     else:
                         st.session_state.selected_subs.add(sub_name)
-                        st.session_state.quest_cycles[sub_name] = 1 # 개별 주기 기본값 1일 할당
+                        st.session_state.quest_cycles[sub_name] = 1
                     st.rerun()
                     
-    # 작심삼일 경고 로직 원본 유지
     if len(st.session_state.selected_subs) >= 10:
         st.warning("🚨 [과부하 경고] 종목이 너무 많습니다! 조절을 권장합니다.")
 
     st.markdown("---")
     
-    # 🌟 업데이트: 단일 주기가 아닌, 선택한 '소분류 종목별 개별 슬라이더' 동적 렌더링 시스템 구현
     if st.session_state.selected_subs:
         st.subheader("⏱️ 소분야 종목별 개별 퀘스트 주기 설정")
         for sub_item in st.session_state.selected_subs:
@@ -437,7 +438,6 @@ elif st.session_state.page == 'sub_select':
                 help="1로 설정하면 매일 아침 리셋되는 '일일 퀘스트' 형태가 됩니다."
             )
 
-    # 네비게이션
     col1, col2 = st.columns(2)
     with col1:
         if st.button("⬅️ 뒤로 가기", use_container_width=True):
