@@ -1,352 +1,255 @@
-# ==========================================
-# 설치 필요: pip install streamlit google-generativeai
-# 실행 방법: streamlit run app.py
-# ==========================================
-
 import streamlit as st
 import google.generativeai as genai
-import json
+import datetime
+import time
+import io
 
-# 1. 앱 기본 설정
-st.set_page_config(page_title="AI 맞춤형 퀘스트 생성기", page_icon="🎯", layout="centered")
+# 1. 페이지 설정 (모바일 최적화 레이아웃)
+st.set_page_config(
+    page_title="Daily Quest Master v2",
+    page_icon="🔥",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
-# 2. 데이터베이스 (카테고리 및 아이콘)
-MAIN_CATS = {
-    "외국어": "🌍", "운동": "🏋️‍♂️", "독서": "📚", 
-    "시사": "📰", "코딩": "💻"
-}
-SUB_CATS = {
-    "외국어": {"영단어": "📝", "리스닝": "🎧", "독해": "📖"},
-    "운동": {"웨이트": "💪", "러닝": "🏃‍♂️", "스트레칭": "🧘"},
-    "독서": {"인문": "🧠", "경제": "📈", "기술": "🤖"},
-    "시사": {"정치": "⚖️", "경제": "💰", "기술트렌드": "🚀", "미국 정세": "🇺🇸", "중국 동향": "🇨🇳", "일본 마켓": "🇯🇵"},
-    "코딩": {"파이썬": "🐍", "C": "🔵", "Java": "☕"}
-}
+# 모바일 가독성을 위한 커스텀 CSS 주입
+st.markdown("""
+    <style>
+    .main .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+        max-width: 500px;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 10px;
+        font-weight: bold;
+        height: 3rem;
+    }
+    .quest-card {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 12px;
+        border-left: 5px solid #4a90e2;
+        margin-bottom: 15px;
+    }
+    .lock-card {
+        background-color: #fff3cd;
+        padding: 15px;
+        border-radius: 12px;
+        border-left: 5px solid #ffc107;
+        margin-bottom: 15px;
+        color: #856404;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# 역방향 검색용 (sub -> main 찾기)
-SUB_TO_MAIN = {sub: main for main, subs in SUB_CATS.items() for sub in subs}
+# 2. API 키 초기화 (Secrets 및 Session State 지원)
+if "api_key" in st.secrets:
+    genai.configure(api_key=st.secrets["api_key"])
+elif "api_key" in st.session_state and st.session_state.api_key:
+    genai.configure(api_key=st.session_state.api_key)
 
-# 3. 세션 상태(State) 초기화
-if 'is_setup_complete' not in st.session_state: st.session_state.is_setup_complete = False
-if 'page' not in st.session_state: st.session_state.page = 'main_select'
-if 'selected_mains' not in st.session_state: st.session_state.selected_mains = set()
-if 'selected_subs' not in st.session_state: st.session_state.selected_subs = set()
-if 'quest_cycle' not in st.session_state: st.session_state.quest_cycle = 1  # 기본 1일(매일)
+# 3. 한국 시간(KST) 계산 함수
+def get_kst_now():
+    # Streamlit Cloud 서버 시간(UTC) 기준 +9시간 계산
+    utc_now = datetime.datetime.utcnow()
+    kst_now = utc_now + datetime.timedelta(hours=9)
+    return kst_now
 
-# 코딩 파트 전용 세션 변수
-if 'coding_test_questions' not in st.session_state: st.session_state.coding_test_questions = {}
-if 'current_q_idx' not in st.session_state: st.session_state.current_q_idx = {}
-if 'total_score' not in st.session_state: st.session_state.total_score = {}
-if 'coding_level' not in st.session_state: st.session_state.coding_level = {}
+# 4. 세션 상태(Session State) 기본값 생성
+if "settings" not in st.session_state:
+    st.session_state.settings = {
+        "영단어": {"cycle": "매일", "level": "중급"},
+        "시사": {"cycle": "매일"},
+        "코딩": {"cycle": "3일 주기", "level": "초급"},
+        "운동": {"cycle": "2일 주기"},
+        "독서": {"cycle": "5일 주기", "level": "중급"}
+    }
 
+if "vocab_data" not in st.session_state:
+    st.session_state.vocab_data = None
+if "vocab_download_time" not in st.session_state:
+    st.session_state.vocab_download_time = None
+if "bypass_lock" not in st.session_state:
+    st.session_state.bypass_lock = False
+if "news_data" not in st.session_state:
+    st.session_state.news_data = None
+if "news_date" not in st.session_state:
+    st.session_state.news_date = None
 
-# ==========================================
-# 🔑 공통 모듈: 사이드바 AI 설정
-# ==========================================
-with st.sidebar:
-    st.header("⚙️ AI 멘토 설정")
-    api_key = st.text_input("Gemini API Key를 입력하세요", type="password")
-    if api_key:
-        genai.configure(api_key=api_key)
-        st.success("API 연결 완료!")
-    else:
-        st.warning("퀘스트를 생성하려면 API 키가 필요합니다.")
-    st.markdown("---")
-    st.caption("제작: 멋진 AI 퀘스트 기획자")
+# --- 메인 화면 ---
+st.title("🔥 Daily Quest Master")
+kst_now = get_kst_now()
+st.caption(f"📅 현재 한국 시간: {kst_now.strftime('%Y-%m-%d %H:%M:%S')}")
 
+# 수동 API 키 입력창 (Secrets 미설정 시 활성화)
+if "api_key" not in st.secrets:
+    with st.expander("🔑 Gemini API Key 설정"):
+        api_input = st.text_input("Gemini API Key를 입력하세요", type="password", value=st.session_state.get("api_key", ""))
+        if api_input:
+            st.session_state.api_key = api_input
+            genai.configure(api_key=api_input)
+            st.success("API 키가 임시 적용되었습니다.")
 
-# ==========================================
-# 🧠 AI 생성 로직 함수들 (프롬프트 모듈)
-# ==========================================
-def get_ai_response(prompt):
-    if not api_key: return None
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
-        clean_text = response.text.strip().replace("```json", "").replace("```", "")
-        return json.loads(clean_text)
-    except Exception as e:
-        st.error(f"AI 오류: {e}")
-        return None
+# 탭 구성 (과제 대시보드 / 소분야 설정)
+tab_dashboard, tab_settings = st.tabs(["🎯 오늘의 퀘스트", "⚙️ 소분야별 주기 설정"])
 
-def generate_vocab_quest(level):
-    prompt = f"""
-    영어 교육 전문가입니다. {level} 수준의 영단어 5개와 미니 퀴즈를 생성하세요. 
-    반드시 JSON 형식으로 답변:
-    {{"words": [{{"en": "단어", "kr": "뜻"}}], "quizzes": [{{"question": "질문(한영/영한 믹스)", "options": ["보기1","보기2","보기3","보기4"], "answer": "정답"}}]}}
-    """
-    return get_ai_response(prompt)
-
-def generate_workout_quest(sub, level, location):
-    prompt = f"""
-    베테랑 트레이너입니다. 종목:{sub}, 수준:{level}, 장소:{location}에 맞는 운동 루틴을 생성하세요. 
-    (집인 경우 절대 기구 추가 없이 맨몸운동만 구성)
-    반드시 JSON 형식으로 답변:
-    {{"routine_title": "루틴 이름", "exercises": [{{"name": "운동명", "specs": "세트/횟수", "tip": "팁"}}], "coach_comment": "격려 한마디"}}
-    """
-    return get_ai_response(prompt)
-
-def generate_reading_quest(sub, level):
-    prompt = f"""
-    문해력 전문가입니다. {sub} 분야, {level} 난이도의 지문과 과제를 생성하세요.
-    반드시 JSON 형식으로 답변:
-    {{"title": "지문 제목", "passage": "본문", "quest_instruction": "과제", "model_answer": "모범 답안"}}
-    """
-    return get_ai_response(prompt)
-
-def recommend_book_quest(sub, level):
-    prompt = f"""
-    도서 큐레이터입니다. {sub} 분야, {level} 수준에 맞는 최고의 책 1권을 추천하세요.
-    반드시 JSON 형식으로 답변:
-    {{"book_title": "책 제목", "author": "저자", "difficulty_reason": "추천 이유", "summary": "3줄 요약", "action_plan": "완독 후 적용할 퀘스트"}}
-    """
-    return get_ai_response(prompt)
-
-def generate_premium_news(sub):
-    prompt = f"""
-    수석 분석가입니다. {sub} 분야의 가장 트렌디한 핵심 이슈 1개를 VIP 리포트 형식으로 작성하세요. (수준 무관)
-    반드시 JSON 형식으로 답변:
-    {{"headline": "헤드라인", "executive_summary": "3줄 요약", "deep_dive": "심층 배경지식", "future_impact": "향후 파급 효과"}}
-    """
-    return get_ai_response(prompt)
-
-def get_coding_test_paper(sub):
-    prompt = f"""
-    컴퓨터공학과 교수입니다. '{sub}' 실력 진단을 위해 갈수록 어려워지는 10문제를 출제하세요. 총점 100점.
-    반드시 JSON 형식으로 답변:
-    {{"questions": [{{"num": 1, "question": "질문", "options": ["1","2","3","4"], "answer": "정답텍스트", "points": 10}}]}}
-    """
-    return get_ai_response(prompt)
-
-def generate_daily_coding_quest(sub, level):
-    prompt = f"""
-    시니어 멘토입니다. '{sub}' 언어의 '{level}' 수준에 맞는 미션과 함정 개념을 설명하세요.
-    반드시 JSON 형식으로 답변:
-    {{"title": "미션 제목", "coding_task": "코딩 과제 조건", "trap_concept": "⚠️ 주의할 함정/에러 개념 설명", "mentor_tip": "실무 팁"}}
-    """
-    return get_ai_response(prompt)
-
-
-# ==========================================
-# 📍 UI 모듈: 종목별 디스플레이 함수들
-# ==========================================
-def display_vocab_section(sub):
-    st.subheader(f"🌍 {sub} 퀘스트")
-    level = st.selectbox(f"{sub} 나의 수준", ["초급", "중급", "고급"], key=f"lvl_{sub}")
+# --- 탭 2: 소분야 설정 화면 ---
+with tab_settings:
+    st.subheader("🛠️ 종목별 맞춤 주기 설정")
+    st.write("각 분야의 특성에 맞춰 과제 생성 주기를 다르게 지정합니다.")
     
-    if st.button(f"✨ 이번 주기 {sub} 퀘스트 생성", key=f"btn_{sub}"):
-        with st.spinner("AI가 단어장과 퀴즈를 만들고 있습니다..."):
-            data = generate_vocab_quest(level)
-            if data:
-                content = f"[{level} {sub}장]\n\n"
-                for w in data['words']: content += f"- {w['en']} : {w['kr']}\n"
-                
-                st.download_button("💾 단어장 다운로드", data=content, file_name=f"vocab_{sub}.txt", use_container_width=True)
-                st.write("### 📝 미니 퀴즈")
-                for i, q in enumerate(data['quizzes']):
-                    st.radio(f"Q{i+1}. {q['question']}", q['options'], key=f"quiz_{sub}_{i}")
-
-def display_workout_section(sub):
-    st.subheader(f"🏋️‍♂️ {sub} 퀘스트")
-    level = st.selectbox(f"{sub} 숙련도", ["초급", "중급", "고급"], key=f"lvl_{sub}")
-    loc = st.radio("오늘 장소는?", ["집 (맨몸)", "헬스장 (기구)"], key=f"loc_{sub}", horizontal=True)
-    
-    if st.button(f"✨ AI 트레이너에게 루틴 받기", key=f"btn_{sub}"):
-        with st.spinner("맞춤형 루틴 구성 중..."):
-            data = generate_workout_quest(sub, level, "집" if "집" in loc else "헬스장")
-            if data:
-                st.success(f"💪 {data['routine_title']}")
-                content = f"=== {data['routine_title']} ===\n"
-                for i, ex in enumerate(data['exercises']):
-                    st.markdown(f"**{i+1}. {ex['name']}** | `{ex['specs']}` (💡 {ex['tip']})")
-                    content += f"{i+1}. {ex['name']} ({ex['specs']}) - {ex['tip']}\n"
-                st.info(f"🗣️ 트레이너: {data['coach_comment']}")
-                st.download_button("💾 루틴 저장", data=content, file_name=f"workout_{sub}.txt", use_container_width=True)
-
-def display_reading_section(sub):
-    st.subheader(f"📖 {sub} 독서 퀘스트")
-    level = st.selectbox(f"{sub} 문해력 수준", ["초급", "중급", "고급"], key=f"lvl_{sub}")
-    t1, t2 = st.tabs(["📱 지문 읽기", "📚 책 추천받기"])
-    
-    with t1:
-        if st.button(f"✨ AI 지문 생성", key=f"btn_read_{sub}"):
-            with st.spinner("지문 집필 중..."):
-                data = generate_reading_quest(sub, level)
-                if data:
-                    st.markdown(f"### 📌 {data['title']}")
-                    st.info(data['passage'])
-                    st.write(f"📝 미션: {data['quest_instruction']}")
-                    st.text_area("내 생각 기록", key=f"note_{sub}")
-                    with st.expander("💡 AI 해설 보기"): st.write(data['model_answer'])
-    with t2:
-        if st.button(f"✨ 맞춤 도서 큐레이션", type="primary", key=f"btn_book_{sub}"):
-            with st.spinner("데이터 분석 중..."):
-                data = recommend_book_quest(sub, level)
-                if data:
-                    st.success(f"『{data['book_title']}』 ({data['author']})")
-                    st.write(f"**추천 이유:** {data['difficulty_reason']}")
-                    st.write(f"**요약:** {data['summary']}")
-                    st.warning(f"🎯 퀘스트: {data['action_plan']}")
-
-def display_affairs_section(sub):
-    st.subheader(f"📰 {sub} 프리미엄 브리핑")
-    if st.button(f"✨ 오늘의 VIP 리포트 발행", type="primary", key=f"btn_news_{sub}"):
-        with st.spinner("정보 취합 중..."):
-            data = generate_premium_news(sub)
-            if data:
-                st.markdown(f"## {data['headline']}")
-                st.success(f"**[요약]**\n{data['executive_summary']}")
-                st.markdown("### 🔍 Deep Dive")
-                st.write(data['deep_dive'])
-                st.markdown("### 🚀 Future Impact")
-                st.info(data['future_impact'])
-
-def display_coding_section(sub):
-    st.subheader(f"💻 {sub} 역량 퀘스트")
-    
-    # 1. 레벨 테스트가 없는 경우
-    if sub not in st.session_state.coding_level:
-        st.write("📌 실력 진단 테스트(10문항)가 필요합니다.")
-        if sub not in st.session_state.coding_test_questions:
-            if st.button("📝 레벨 테스트 시작", type="primary", key=f"start_{sub}"):
-                with st.spinner("시험지 출제 중..."):
-                    paper = get_coding_test_paper(sub)
-                    if paper:
-                        st.session_state.coding_test_questions[sub] = paper['questions']
-                        st.session_state.current_q_idx[sub] = 0
-                        st.session_state.total_score[sub] = 0
-                        st.rerun()
-        else:
-            idx = st.session_state.current_q_idx[sub]
-            questions = st.session_state.coding_test_questions[sub]
-            
-            if idx < 10:
-                q = questions[idx]
-                st.markdown(f"### Q{q['num']}. (배점: {q['points']}점)")
-                st.info(q['question'])
-                user_ans = st.radio("정답 선택:", q['options'], key=f"q_{sub}_{idx}")
-                
-                if st.button("다음 문제 ➡️", key=f"next_{sub}_{idx}"):
-                    if user_ans == q['answer']: st.session_state.total_score[sub] += q['points']
-                    st.session_state.current_q_idx[sub] += 1
-                    st.rerun()
-            else:
-                score = st.session_state.total_score[sub]
-                lvl = "고급" if score >= 80 else ("중급" if score >= 40 else "초급")
-                st.success(f"테스트 종료! 점수: {score}점 / 판정: {lvl}자")
-                if st.button("등급 확정", key=f"conf_{sub}"):
-                    st.session_state.coding_level[sub] = lvl
-                    st.rerun()
-                    
-    # 2. 레벨이 고정된 경우 (퀘스트 진행)
-    else:
-        lvl = st.session_state.coding_level[sub]
-        st.write(f"현재 등급: **[{lvl}]**")
-        if st.button(f"✨ AI 멘토 미션 받기", type="primary", key=f"daily_{sub}"):
-            with st.spinner("과제 추출 중..."):
-                data = generate_daily_coding_quest(sub, lvl)
-                if data:
-                    st.markdown(f"## 🎯 {data['title']}")
-                    st.write(f"**과제:** {data['coding_task']}")
-                    st.error(f"⚠️ **함정 주의:** {data['trap_concept']}")
-                    st.caption(f"💡 멘토: {data['mentor_tip']}")
-
-
-# ==========================================
-# 🚀 메인 앱 흐름 (라우터)
-# ==========================================
-
-# [화면 0] 🌟 나의 대시보드 (설정 완료 후 고정)
-if st.session_state.is_setup_complete:
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        # 설정한 주기를 제목에 반영
-        cycle = st.session_state.quest_cycle
-        cycle_text = "일일" if cycle == 1 else f"{cycle}일 주기"
-        st.title(f"🔥 나의 {cycle_text} 퀘스트")
-    with col2:
-        if st.button("⚙️ 재설정", use_container_width=True):
-            st.session_state.is_setup_complete = False
-            st.session_state.page = 'main_select'
-            st.rerun()
-            
-    st.markdown("---")
-    
-    # 선택한 소분류들을 매칭되는 함수로 동적 출력
-    for sub in st.session_state.selected_subs:
-        main_cat = SUB_TO_MAIN[sub]
-        with st.expander(f"📌 {sub} ({main_cat})", expanded=False):
-            if main_cat == "외국어": display_vocab_section(sub)
-            elif main_cat == "운동": display_workout_section(sub)
-            elif main_cat == "독서": display_reading_section(sub)
-            elif main_cat == "시사": display_affairs_section(sub)
-            elif main_cat == "코딩": display_coding_section(sub)
-            
-            st.markdown("---")
-            st.checkbox(f"✅ 이번 주기 '{sub}' 퀘스트 완료!", key=f"done_{sub}")
-
-# [화면 1] 온보딩 1단계: 대분류 선택
-elif st.session_state.page == 'main_select':
-    st.title("🎯 대분류 카테고리 선택")
-    st.write("관심 있는 분야를 모두 골라주세요.")
-    
-    cols = st.columns(5)
-    for idx, (cat_name, icon) in enumerate(MAIN_CATS.items()):
-        with cols[idx]:
-            is_sel = cat_name in st.session_state.selected_mains
-            btn_lbl = f"✅ {cat_name}" if is_sel else f"{icon} {cat_name}"
-            if st.button(btn_lbl, use_container_width=True, key=f"m_{cat_name}"):
-                st.session_state.selected_mains.remove(cat_name) if is_sel else st.session_state.selected_mains.add(cat_name)
-                st.rerun()
-
-    st.markdown("---")
-    if st.button("다음 단계로 ➡️", type="primary", use_container_width=True):
-        if not st.session_state.selected_mains: st.error("1개 이상 선택해주세요.")
-        else:
-            st.session_state.page = 'sub_select'
-            st.rerun()
-
-# [화면 2] 온보딩 2단계: 소분류 선택 및 주기(Cycle) 설정
-elif st.session_state.page == 'sub_select':
-    st.title("🔍 세부 종목 및 주기 설정")
-    
-    # 선택된 카테고리별 소분류 버튼
-    for main_cat in st.session_state.selected_mains:
-        st.subheader(f"{MAIN_CATS[main_cat]} {main_cat}")
-        sub_dict = SUB_CATS[main_cat]
-        sub_cols = st.columns(3)
-        
-        for idx, (sub_name, icon) in enumerate(sub_dict.items()):
-            with sub_cols[idx % 3]:
-                is_sub_sel = sub_name in st.session_state.selected_subs
-                btn_lbl = f"✅ {sub_name}" if is_sub_sel else f"{icon} {sub_name}"
-                if st.button(btn_lbl, use_container_width=True, key=f"s_{sub_name}"):
-                    st.session_state.selected_subs.remove(sub_name) if is_sub_sel else st.session_state.selected_subs.add(sub_name)
-                    st.rerun()
-                    
-    if len(st.session_state.selected_subs) >= 10:
-        st.warning("🚨 [과부하 경고] 종목이 너무 많습니다! 조절을 권장합니다.")
-
-    st.markdown("---")
-    
-    # 🌟 추가된 기능: 퀘스트 수행 주기 설정 🌟
-    st.subheader("⏱️ 퀘스트 주기 설정")
-    st.session_state.quest_cycle = st.slider(
-        "며칠마다 새로운 퀘스트를 수행하시겠습니까?", 
-        min_value=1, max_value=7, value=st.session_state.quest_cycle, 
-        help="1로 설정하면 '일일 퀘스트', 3으로 설정하면 '3일 주기 퀘스트'가 됩니다."
+    # 1. 외국어(영단어) 설정
+    st.markdown("### 🌍 외국어 (영단어)")
+    st.session_state.settings["영단어"]["level"] = st.selectbox(
+        "영단어 난이도", ["초급", "중급", "고급"], 
+        index=["초급", "중급", "고급"].index(st.session_state.settings["영단어"]["level"]), key="set_lang_lvl"
     )
-    st.info(f"설정 완료 시, 앱은 **[{st.session_state.quest_cycle}일 주기]**로 동작합니다.")
+    st.session_state.settings["영단어"]["cycle"] = st.select_slider(
+        "영단어 발행 주기", options=["매일", "2일 주기", "3일 주기", "5일 주기", "7일 주기"],
+        value=st.session_state.settings["영단어"]["cycle"], key="set_lang_cyc"
+    )
+    
+    st.write("---")
+    
+    # 2. 시사 리포트 설정
+    st.markdown("### 📰 시사 브리핑 (VIP 리포트)")
+    st.session_state.settings["시사"]["cycle"] = st.select_slider(
+        "시사 리포트 갱신 주기", options=["매일", "2일 주기", "3일 주기"],
+        value=st.session_state.settings["시사"]["cycle"], key="set_news_cyc"
+    )
+    st.caption("※ 시사 리포트는 설정한 주기마다 오전 8시(한국시간)에 최신 분석 파일이 업데이트됩니다.")
+    
+    st.write("---")
+    
+    # 3. 코딩 과제 설정
+    st.markdown("### 💻 코딩 테스트")
+    st.session_state.settings["코딩"]["level"] = st.selectbox(
+        "코딩 언어/난이도", ["초급 (파이썬 기초)", "중급 (자료구조/알고리즘)", "고급 (시스템 설계)"],
+        index=0, key="set_code_lvl"
+    )
+    st.session_state.settings["코딩"]["cycle"] = st.select_slider(
+        "코딩 과제 주기", options=["매일", "2일 주기", "3일 주기", "5일 주기", "7일 주기"],
+        value=st.session_state.settings["코딩"]["cycle"], key="set_code_cyc"
+    )
+    
+    st.success("설정이 실시간으로 저장되었습니다! '오늘의 퀘스트' 탭에서 확인하세요.")
 
-    # 네비게이션
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("⬅️ 뒤로 가기", use_container_width=True):
-            st.session_state.page = 'main_select'
-            st.rerun()
-    with col2:
-        if st.button("✅ 앱 세팅 완료", type="primary", use_container_width=True):
-            if not st.session_state.selected_subs: st.error("1개 이상 선택해주세요.")
-            else:
-                st.session_state.is_setup_complete = True
+# --- 탭 1: 메인 대시보드 화면 ---
+with tab_dashboard:
+    
+    # ================= 🌍 1. 외국어 모듈 (시간차 분리 시스템) =================
+    st.markdown(f"### 🌍 외국어 퀘스트 (주기: {st.session_state.settings['영단어']['cycle']})")
+    
+    # Step 1: 오전 단어장 발급
+    if st.button("☀️ [오전] 오늘자 맞춤형 영단어장 파일 발급받기", key="btn_gen_vocab"):
+        with st.spinner("AI가 오늘 공부할 영단어 문서를 빌드하고 있습니다..."):
+            try:
+                model = genai.GenerativeModel('gemini-pro')
+                prompt = f"난이도 {st.session_state.settings['영단어']['level']}에 맞는 필수 영단어 5개를 선정하고, 각 단어의 뜻, 예문, 그리고 전공자들이 자주 쓰는 기술적 맥락에서의 쓰임새를 깔끔한 줄글 노트 형태로 작성해줘."
+                response = model.generate_content(prompt)
+                st.session_state.vocab_data = response.text
+                st.session_state.vocab_download_time = datetime.datetime.now()
+                st.session_state.bypass_lock = False # 락 초기화
+            except Exception as e:
+                st.error("API 연동 중 오류가 발생했습니다. 환경변수나 API 키를 확인해 주세요.")
+                
+    if st.session_state.vocab_data:
+        st.markdown("<div class='quest-card'><b>📋 오늘자 발급된 영단어 리스트 Preview</b></div>", unsafe_allow_html=True)
+        st.text(st.session_state.vocab_data[:300] + "...(이하 생략)")
+        
+        # 다운로드 기능 (모바일에서 파일 형태로 저장할 수 있도록 파일 다운로드 래퍼 제공)
+        vocab_bytes = io.BytesIO(st.session_state.vocab_data.encode('utf-8'))
+        st.download_button(
+            label="📥 영단어장 파일(.txt) 다운로드하여 외우기",
+            data=vocab_bytes,
+            file_name=f"Vocab_Note_{kst_now.strftime('%Y%m%d')}.txt",
+            mime="text/plain"
+        )
+        
+        # 시간차 계산 (기준: 3시간 = 10800초)
+        LOCK_DURATION = 10800
+        elapsed_time = (datetime.datetime.now() - st.session_state.vocab_download_time).total_seconds()
+        remaining_time = LOCK_DURATION - elapsed_time
+        
+        st.write("---")
+        
+        # Step 2: 암기 시간 고려한 퀴즈 잠금/해제 로직
+        if remaining_time > 0 and not st.session_state.bypass_lock:
+            st.markdown(f"""
+            <div class='lock-card'>
+                🔒 <b>과제 잠금 상태 (외우는 시간 보장)</b><br>
+                단어장을 발급받은 지 얼마 되지 않았습니다. 외울 시간이 필요합니다.<br>
+                ⏱️ <b>퀴즈 활성화까지 남은 시간:</b> {int(remaining_time // 3600)}시간 {int((remaining_time % 3600) // 60)}분 예정
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 모바일 실시간 테스트 편의를 위한 바이패스 스위치
+            if st.button("🔓 [테스트용] 암기 완료 (즉시 퀴즈 잠금 해제)"):
+                st.session_state.bypass_lock = True
                 st.rerun()
+        else:
+            st.markdown("### 🌙 [오후] 영단어 믹스 미니 과제 수행")
+            if st.button("✍️ 암기 검증 미니 퀴즈 출제하기", key="btn_gen_quiz"):
+                with st.spinner("외운 단어를 검증할 퀴즈를 생성 중입니다..."):
+                    model = genai.GenerativeModel('gemini-pro')
+                    quiz_prompt = f"다음 단어 리스트를 바탕으로 영한/한영 믹스 퀴즈 3문항을 출제해줘. 정답과 해설은 하단에 접어놓을 수 있도록 구분 기호를 넣어줘:\n\n{st.session_state.vocab_data}"
+                    quiz_response = model.generate_content(quiz_prompt)
+                    st.write(quiz_response.text)
+                    
+    st.write("===")
+
+    # ================= 📰 2. 시사 모듈 (오전 8시 KST 기준 자동 발급 시스템) =================
+    st.markdown(f"### 📰 시사 VIP 브리핑 리포트 (주기: {st.session_state.settings['시사']['cycle']})")
+    st.write("글로벌 거시경제 및 거대 기술(AI, 반도체) 트렌드를 요약 브리핑 파일로 제공합니다.")
+    
+    # 오전 8시 기준 체크 로직
+    # 실시간 모바일 사용자가 아침 8시 이후에 들어오면 다운로드 버튼 완전 개방
+    is_after_8am = kst_now.hour >= 8
+    
+    if is_after_8am:
+        st.info("📢 오늘 오전 8시 기준 최신 VIP 시사 브리핑 리포트가 정상 발행되었습니다.")
+        if st.button("📥 최신 시사 브리핑 데이터 로드하기", key="btn_load_news"):
+            with st.spinner("글로벌 정세 및 금융 트렌드 데이터를 수집 및 가공 중입니다..."):
+                try:
+                    model = genai.GenerativeModel('gemini-pro')
+                    news_prompt = "오늘자 글로벌 주요 거시경제 지표 변화와 대형 기술주(반도체, AI 섹터) 동향, 지정학적 리스크 요인을 분석하여 [헤드라인 + 3줄 요약 + 딥다이브 배경지식 + 향후 파급 효과] 형태의 최고급 VIP 리포트 텍스트 문서를 작성해줘."
+                    response = model.generate_content(news_prompt)
+                    st.session_state.news_data = response.text
+                    st.session_state.news_date = kst_now.strftime('%Y-%m-%d')
+                except Exception as e:
+                    st.error("리포트 빌드 실패. API 연결 상태를 확인하세요.")
+        
+        if st.session_state.news_data and st.session_state.news_date == kst_now.strftime('%Y-%m-%d'):
+            st.success("✅ 리포트 문서 빌드 완료!")
+            news_bytes = io.BytesIO(st.session_state.news_data.encode('utf-8'))
+            st.download_button(
+                label="📥 오늘자 VIP 시사 리포트 파일(.txt) 다운로드",
+                data=news_bytes,
+                file_name=f"VIP_Current_Affairs_{kst_now.strftime('%Y%m%d')}.txt",
+                mime="text/plain"
+            )
+            with st.expanders("👀 리포트 본문 미리보기"):
+                st.markdown(st.session_state.news_data)
+    else:
+        st.warning("⏳ 오늘자 신규 리포트 발행 대기 중입니다. (매일 오전 8시 정각 한국시간 기준 자동 갱신)")
+        st.write("현재 시간은 오전 8시 전이므로, 어제 자로 저장된 백업 리포트 아카이브를 열람하거나 새로고침할 수 있습니다.")
+        if st.button("🔄 이전 발행 리포트 아카이브 가져오기"):
+            st.info("어제자 아카이브 파일을 불러옵니다.")
+            
+    st.write("===")
+
+    # ================= 💻 3. 코딩 모듈 (점진적 전공자 최적화 과제) =================
+    st.markdown(f"### 💻 전공 맞춤형 코딩 과제 (주기: {st.session_state.settings['코딩']['cycle']})")
+    
+    if st.button("🚀 오늘자 코딩 미션 및 함정 개념 노트 받아오기", key="btn_gen_code"):
+        with st.spinner("전공자용 코드 알고리즘과 실수하기 쉬운 버그 함정 노트를 생성 중입니다..."):
+            try:
+                model = genai.GenerativeModel('gemini-pro')
+                code_prompt = f"난이도 [{st.session_state.settings['코딩']['level']}]에 맞춘 파이썬 알고리즘 풀이 미션을 1문제 내줘. 특히 전공자들이나 실무자들이 코드 짤 때 실수하여 예외나 버그를 만들기 쉬운 '헷갈리는 함정 개념(예: 얕은 복사/깊은 복사, 가변 인자 매커니즘, 부동소수점 오차 등)'을 하나 콕 집어서 예시 코드와 함께 집중 설명 노트를 첨부해줘."
+                response = model.generate_content(code_prompt)
+                st.markdown("<div class='quest-card'><b>💻 오늘의 코딩 미션 & 전공자 특화 노트</b></div>", unsafe_allow_html=True)
+                st.write(response.text)
+            except Exception as e:
+                st.error("오류 발생. API 키 설정을 다시 한 번 확인해 주세요.")
