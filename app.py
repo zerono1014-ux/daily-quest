@@ -92,23 +92,18 @@ SUB_CATS = {
 SUB_TO_MAIN = {sub: main for main, subs in SUB_CATS.items() for sub in subs}
 
 # ==========================================
-# 🧠 2. AI 프롬프트 파이프라인 (JSON 추출 엔진 강화)
+# 🧠 2. AI 프롬프트 파이프라인 (오타 맹점 제거 완치본)
 # ==========================================
 def get_ai_clean_json(prompt):
-    if not secret_key and 'api_key' not in globals():
+    if not secret_key:
         st.error("API 키가 누락되었습니다. 설정을 확인하세요.")
         return None
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        # API 키가 유동적으로 바인딩되도록 안전 장치 확보
-        current_key = secret_key if secret_key else api_key
-        if current_key:
-            genai.configure(api_key=current_key)
-            
         response = model.generate_content(prompt)
         text = response.text.strip()
         
-        # 마크다운 백틱 및 불필요한 공백 스트립 필터 가동
+        # 마크다운 찌꺼기 완벽 제거
         text = re.sub(r"```json|```", "", text).strip()
         json_match = re.search(r"\{.*\}", text, re.DOTALL)
         if json_match:
@@ -121,7 +116,7 @@ def get_ai_clean_json(prompt):
 def ai_agent_hub(sub, level, opt=""):
     main = SUB_TO_MAIN[sub]
     if main == "외국어":
-        return get_ai_clean_json(f"영어 교육 전문가이자 공학 기술 영어 멘토입니다. 토익(TOEIC) 필수 어휘와 IT 분야 기술 전문 용어가 혼합된 '{level}' 수준의 필수 영단어 5개와 암기 검증용 퀴즈 3문항을 생성하세요. 반환 양식 JSON: {{\"words\": [{阻'en\': \'단어\', \'kr\': \'뜻\', \'example\': \'예문\'}}], \"quizzes\": [{阻'question\': \'질문\', \'options\': [\"보기1\",\"보기2\",\"보기3\",\"보기4\"], \'answer\': \'정답텍스트\'}}]}}")
+        return get_ai_clean_json(f"영어 교육 전문가이자 공학 기술 영어 멘토입니다. 토익(TOEIC) 필수 어휘와 IT 분야 기술 전문 용어가 혼합된 '{level}' 수준의 필수 영단어 5개와 암기 검증용 퀴즈 3문항을 생성하세요. 반환 양식 JSON: {{\"words\": [{阻'en\': \'단어\', \'kr\': \'뜻\', \'example\': \'예문\'}}], \"quizzes\": [{阻'question\': \'질문\', \'options\': [\'보기1\',\'보기2\',\'보기3\',\'보기4\'], \'answer\': \'정답텍스트\'}}]}}")
     elif main == "운동":
         return get_ai_clean_json(f"전문 스포츠 트레이너입니다. 종목:{sub}, 수준:{level}, 장소:{opt}에 맞는 루틴 미션을 상세히 짜주세요. 반환 양식 JSON: {{\"title\": \"루틴명\", \"list\": [{阻'name\': \'운동명\', \'sets\': \'세트/횟수\', \'tip\': \'자세 팁\'}}], \"comment\": \"멘토 한마디\"}}")
     elif main == "독서" and opt == "지문":
@@ -131,9 +126,9 @@ def ai_agent_hub(sub, level, opt=""):
     elif main == "시사":
         return get_ai_clean_json(f"글로벌 테크 자산 수석 분석가입니다. '{sub}' 영역과 거시 경제 지표를 연계하여, 특히 인공지능(AI)과 반도체 섹터 동향, 미국 대형 테크주 시황 변동성, 그리고 중동 지정학적 리스크가 공급망에 미치는 나비효과 VIP용 심층 리포트를 작성하세요. 반환 양식 JSON: {{\"headline\": \"헤드라인\", \"summary\": \"핵심 3줄 요약\", \"deep_dive\": \"심층 분석\", \"impact\": \"자산 시장 파급 효과\"}}")
     elif main == "코딩" and opt == "테스트":
-        return get_ai_clean_json(f"컴퓨터공학과 교수입니다. 다른 설명은 배제하고 오직 순수 JSON 데이터만 반환하세요. '{sub}' 언어 능력을 판정하기 위한 10문항의 객관식 시험지를 출제하세요. 반드시 앞부분 3문제는 가장 쉬운 문법 기초, 중간 4문제는 자료구조 논리 설계, 마지막 3문제는 예외 처리 및 에러 함정 중심의 최고 난이도로 출제해야 합니다. 반환 양식 JSON: {{\"questions\": [{阻'num\': 1, \'difficulty\': \'하/중/상\', \'question\': \'문제 내용\', \'options\': [\"보기1\",\"보기2\",\"보기3\",\"보기4\"], \'answer\': \'정답텍스트\'}}]}}")
+        return get_ai_clean_json(f"컴퓨터공학과 교수입니다. 다른 설명은 배제하고 오직 순수 JSON 데이터만 반환하세요. '{sub}' 언어 능력을 판정하기 위한 10문항의 객관식 시험지를 출제하세요. 반드시 앞부분 3문제는 가장 쉬운 문법 기초, 중간 4문제는 자료구조 논리 설계, 마지막 3문제는 예외 처리 및 에러 함정 중심의 최고 난이도로 출제해야 합니다. 반환 양식 JSON: {{\"questions\": [{阻'num\': 1, \'difficulty\': \'하/중/상\', \'question\': \'문제 내용\', \'options\': [\'보기1\',\'보기2\',\'보기3\',\'보기4\'], \'answer\': \'정답텍스트\'}}]}}")
     elif main == "코딩" and opt == "미션":
-        return get_ai_clean_json(f"프로그래밍 전공 시니어 멘토입니다. 만약 언어가 '파이썬'인 경우교재 <새내기 파이썬>의 핵심 범위(리스트 구조, 조건문 설계)를 반영하고 '개인 주식 포트폴리오 관리 시스템' 구현에 직결되는 {level} 난이도 연계 퀘스트를 설계하세요. 반환 양식 JSON: {{\"title\": \"미션명\", \"task\": \"과제 조건 코딩 요구사항\", \"trap\": \"⚠️ 주의할 함정/에러 개념 설명\", \"tip\": \"실무 전공자 팁\"}}")
+        return get_ai_clean_json(f"프로그래밍 전공 시니어 멘토입니다. 만약 언어가 '파이썬'인 경우 교재 <새내기 파이썬>의 핵심 범위(리스트 구조, 조건문 설계)를 반영하고 '개인 주식 포트폴리오 관리 시스템' 구현에 직결되는 {level} 난이도 연계 퀘스트를 설계하세요. 반환 양식 JSON: {{\"title\": \"미션명\", \"task\": \"과제 조건 코딩 요구사항\", \"trap\": \"⚠️ 주의할 함정/에러 개념 설명\", \"tip\": \"실무 전공자 팁\"}}")
 
 # ==========================================
 # ⚙️ 3. 설정 변경 즉시 반영 정책
@@ -334,6 +329,7 @@ else:
                             st.rerun()
             
             else:
+                # 정규 정밀 데일리 콘텐츠 파트
                 if sub not in st.session_state.db["active_quests"]:
                     with st.spinner("AI 멘토가 오늘의 데일리 퀘스트를 생성하는 중..."):
                         if main == "외국어": st.session_state.db["active_quests"][sub] = ai_agent_hub(sub, level)
