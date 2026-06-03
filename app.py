@@ -6,7 +6,7 @@ import os
 import re
 
 # ==========================================
-# 🎨 [필수] 페이지 설정 및 모바일 CSS (반드시 최상단에 1번만 선언)
+# 🎨 [필수] 페이지 설정 및 모바일 CSS
 # ==========================================
 st.set_page_config(
     page_title="Daily Quest Master",
@@ -17,12 +17,9 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* 상하단 메뉴 및 워터마크 숨기기 */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
-    
-    /* 모바일 여백 꽉 차게 최적화 */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -30,8 +27,6 @@ st.markdown("""
         padding-right: 1rem !important;
         max-width: 480px; 
     }
-    
-    /* 버튼 및 카드 UI 디자인 통합 */
     .stButton>button { width: 100%; border-radius: 12px; font-weight: bold; height: 3.4rem; margin-bottom: 0.6rem; transition: all 0.2s ease;}
     .icon-box { background-color: #1e293b; color: white; padding: 20px; border-radius: 16px; text-align: center; font-size: 24px; font-weight: bold; cursor: pointer; margin-bottom: 15px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
     .quest-card { background-color: #f8f9fa; padding: 18px; border-radius: 14px; border-left: 6px solid #3b82f6; margin-bottom: 15px; color: #1e293b; }
@@ -40,7 +35,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 💾 1. 기기 로컬 DB 영구 저장 시스템 (파일 동기화)
+# 💾 1. 기기 로컬 DB 영구 저장 시스템
 # ==========================================
 DB_FILE = "daily_quest_local_db.json"
 
@@ -57,10 +52,8 @@ def save_local_db(data):
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-# 로컬 파일 데이터 로드 후 세션 바인딩
 local_data = load_local_db()
 
-# 세션 상태 뼈대 구축 및 자동 복구
 if 'db' not in st.session_state:
     st.session_state.db = {
         "is_setup_complete": local_data.get("is_setup_complete", False),
@@ -78,10 +71,8 @@ if 'db' not in st.session_state:
     }
 
 def sync_db():
-    # 세션 상태의 변화를 로컬 DB 파일에 즉시 동기화(Commit)
     save_local_db(st.session_state.db)
 
-# 🔑 Secrets 및 API 연동
 secret_key = st.secrets.get("api_key", "")
 with st.sidebar:
     st.header("🎯 Master 세팅")
@@ -93,7 +84,6 @@ with st.sidebar:
     if api_key:
         genai.configure(api_key=api_key)
 
-# 기본 데이터베이스
 MAIN_CATS = {"외국어": "🌍", "운동": "🏋️‍♂️", "독서": "📚", "시사": "📰", "코딩": "💻"}
 SUB_CATS = {
     "외국어": {"영단어": "📝", "리스닝": "🎧", "독해": "📖"},
@@ -105,7 +95,7 @@ SUB_CATS = {
 SUB_TO_MAIN = {sub: main for main, subs in SUB_CATS.items() for sub in subs}
 
 # ==========================================
-# 🧠 2. AI 프롬프트 파이프라인 및 정규식 추출기
+# 🧠 2. AI 프롬프트 파이프라인
 # ==========================================
 def get_ai_clean_json(prompt):
     if not api_key:
@@ -114,7 +104,6 @@ def get_ai_clean_json(prompt):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
-        # 정규식을 활용해 복잡한 텍스트 찌꺼기 속에서 순수 JSON 오브젝트만 정밀 추출 (마크다운 방어 추가)
         json_match = re.search(r"\{.*\}", response.text.strip(), re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
@@ -123,7 +112,6 @@ def get_ai_clean_json(prompt):
         st.error(f"AI 데이터 모델 빌드 에러: {e}")
         return None
 
-# 카테고리별 프롬프트 제어 장치
 def ai_agent_hub(sub, level, opt=""):
     main = SUB_TO_MAIN[sub]
     if main == "외국어":
@@ -142,41 +130,68 @@ def ai_agent_hub(sub, level, opt=""):
         return get_ai_clean_json(f"프로그래밍 전공 시니어 멘토입니다. 만약 언어가 '파이썬'인 경우, 교재 <새내기 파이썬>의 핵심 진도 범위(리스트 구조 제어, 조건문 논리 설계 등)를 적극 반영하고, 최종적으로 나만의 '개인 주식 포트폴리오 관리 시스템'을 구현하는 데 직결되는 연계 퀘스트를 설계하세요. 전공자가 놓치기 쉬운 치명적인 에러와 함정 개념 설명을 포함해야 합니다. 난이도: {level}. 반환 양식 JSON: {{\"title\": \"미션명\", \"task\": \"과제 조건\", \"trap\": \"⚠️ 주의할 함정/에러 개념\", \"tip\": \"실무 전공자 팁\"}}")
 
 # ==========================================
-# ⚙️ 3. 설정 변경 즉시 반영(Invalidate) 정책 엔진
+# ⚙️ 3. 설정 변경 즉시 반영(Invalidate) 정책
 # ==========================================
 def handle_setting_change(sub, new_val, setting_type):
-    # 주기, 수준 변경 등 설정이 바뀌는 즉시 기존 과제를 폭파하고 재생성 (PRD 2.3조)
     current_setting = st.session_state.db[setting_type].get(sub)
     if current_setting != new_val:
         st.session_state.db[setting_type][sub] = new_val
         if sub in st.session_state.db["active_quests"]:
-            del st.session_state.db["active_quests"][sub] # 즉시 파기
+            del st.session_state.db["active_quests"][sub]
         sync_db()
         st.rerun()
 
 # ==========================================
-# 🕹️ 4. 1단계 온보딩 및 라우터 제어 (로컬 DB 우선)
+# 🕹️ 4. 온보딩 버튼 토글 콜백 함수 (취소 안 되는 버그 수정)
 # ==========================================
+def toggle_main(name):
+    selected = set(st.session_state.db["selected_mains"])
+    if name in selected:
+        selected.remove(name)
+    else:
+        selected.add(name)
+    st.session_state.db["selected_mains"] = list(selected)
+    
+    # 대분류 취소 시, 그에 속한 소분류(세부 종목)도 연쇄적으로 깔끔하게 삭제
+    valid_subs = [sub for sub in st.session_state.db["selected_subs"] if SUB_TO_MAIN.get(sub) in st.session_state.db["selected_mains"]]
+    st.session_state.db["selected_subs"] = valid_subs
+    sync_db()
+
+def toggle_sub(sub_name):
+    selected_subs = set(st.session_state.db["selected_subs"])
+    if sub_name in selected_subs:
+        selected_subs.remove(sub_name)
+    else:
+        selected_subs.add(sub_name)
+        if sub_name not in st.session_state.db["sub_levels"]:
+            st.session_state.db["sub_levels"][sub_name] = "초급"
+        if sub_name not in st.session_state.db["quest_cycles"]:
+            st.session_state.db["quest_cycles"][sub_name] = 1
+    st.session_state.db["selected_subs"] = list(selected_subs)
+    sync_db()
+
 if not st.session_state.db["is_setup_complete"]:
     page = st.session_state.db["page"]
     
     if page == "main_select":
         st.title("🎯 대분류 카테고리 선택")
-        st.write("관심 분야를 선택하세요 (기기 보관)")
+        st.write("관심 분야를 선택하세요 (선택 및 취소 가능)")
         
-        selected = set(st.session_state.db["selected_mains"])
         cols = st.columns(5)
         for idx, (name, icon) in enumerate(MAIN_CATS.items()):
             with cols[idx]:
-                if st.button(f"{icon}\n{name}", key=f"m_{name}", type="primary" if name in selected else "secondary"):
-                    selected.remove(name) if name in selected else selected.add(name)
-                    st.session_state.db["selected_mains"] = list(selected)
-                    sync_db()
-                    st.rerun()
+                st.button(
+                    f"{icon}\n{name}", 
+                    key=f"m_{name}", 
+                    type="primary" if name in st.session_state.db["selected_mains"] else "secondary",
+                    on_click=toggle_main,
+                    args=(name,)
+                )
         
         st.markdown("---")
         if st.button("다음 단계로 ➡️", use_container_width=True):
-            if not selected: st.error("최소 1개 이상의 카테고리를 선택해야 합니다.")
+            if not st.session_state.db["selected_mains"]: 
+                st.error("최소 1개 이상의 카테고리를 선택해야 합니다.")
             else:
                 st.session_state.db["page"] = "sub_select"
                 sync_db()
@@ -184,7 +199,6 @@ if not st.session_state.db["is_setup_complete"]:
 
     elif page == "sub_select":
         st.title("🔍 세부 종목 및 수준 설정")
-        selected_subs = set(st.session_state.db["selected_subs"])
         
         for main in st.session_state.db["selected_mains"]:
             st.subheader(f"{MAIN_CATS[main]} {main}")
@@ -192,17 +206,16 @@ if not st.session_state.db["is_setup_complete"]:
             sub_cols = st.columns(3)
             for idx, (sub_name, icon) in enumerate(sub_dict.items()):
                 with sub_cols[idx % 3]:
-                    is_sel = sub_name in selected_subs
-                    if st.button(f"{icon} {sub_name}", key=f"s_{sub_name}", type="primary" if is_sel else "secondary"):
-                        selected_subs.remove(sub_name) if is_sel else selected_subs.add(sub_name)
-                        st.session_state.db["selected_subs"] = list(selected_subs)
-                        if sub_name not in st.session_state.db["sub_levels"]:
-                            st.session_state.db["sub_levels"][sub_name] = "초급"
-                        if sub_name not in st.session_state.db["quest_cycles"]:
-                            st.session_state.db["quest_cycles"][sub_name] = 1
-                        sync_db()
-                        st.rerun()
+                    is_sel = sub_name in st.session_state.db["selected_subs"]
+                    st.button(
+                        f"{icon} {sub_name}", 
+                        key=f"s_{sub_name}", 
+                        type="primary" if is_sel else "secondary",
+                        on_click=toggle_sub,
+                        args=(sub_name,)
+                    )
         
+        selected_subs = st.session_state.db["selected_subs"]
         if len(selected_subs) >= 10:
             st.warning("🚨 [과부하 경고] 종목이 너무 많습니다! 페이스 조절을 권장합니다.")
             
@@ -238,54 +251,50 @@ if not st.session_state.db["is_setup_complete"]:
 # 📲 5. 메인 대시보드 및 상세 콘텐츠 연동 영역
 # ==========================================
 else:
-    # 상단 탭 구조 분화: 대시보드 홈 / 내 보관함 스크랩북
     menu_tab, archive_tab = st.tabs(["🔥 나의 퀘스트 대시보드", "📥 내 보관함 (스크랩북)"])
     
     with menu_tab:
-        # 특정 종목 진입 여부 체크용 세션 변수
         if "current_sub_view" not in st.session_state:
             st.session_state.current_sub_view = None
             
-        # [메인 홈: 아이콘 뷰 모드]
         if st.session_state.current_sub_view is None:
             st.title("🎯 Daily Quest Master")
             st.write("과제를 시작할 종목 아이콘을 클릭하세요.")
             
-            # 아이콘 배치 그리드 구성
             subs = st.session_state.db["selected_subs"]
             if not subs:
-                st.info("선택된 종목이 없습니다. 우측 재설정 기능을 이용해 종목을 추가하세요.")
+                st.info("선택된 종목이 없습니다. 카테고리 전체 재설정 기능을 이용해 종목을 추가하세요.")
             
             for sub in subs:
                 main_cat = SUB_TO_MAIN[sub]
                 icon = SUB_CATS[main_cat][sub]
-                # 네이티브 스타일의 대시보드 아이콘 버튼 구현
                 if st.button(f"{icon} {sub} ({main_cat})", key=f"dash_{sub}"):
                     st.session_state.current_sub_view = sub
                     st.rerun()
             
             st.markdown("---")
+            # 🔥 완전 초기화를 위해 기억 소거 로직 추가
             if st.button("⚙️ 카테고리 전체 재설정", type="secondary"):
                 st.session_state.db["is_setup_complete"] = False
                 st.session_state.db["page"] = "main_select"
+                st.session_state.db["selected_mains"] = []
+                st.session_state.db["selected_subs"] = []
+                st.session_state.db["active_quests"] = {}
                 sync_db()
                 st.rerun()
                 
-        # [상세 페이지 모드: 특정 종목 내부 뷰]
         else:
             sub = st.session_state.current_sub_view
             main = SUB_TO_MAIN[sub]
             level = st.session_state.db["sub_levels"].get(sub, "초급")
             cycle = st.session_state.db["quest_cycles"].get(sub, 1)
             
-            # 뒤로가기 버튼
             if st.button("⬅️ 대시보드 홈으로 가기", key="back_to_dash"):
                 st.session_state.current_sub_view = None
                 st.rerun()
                 
             st.title(f"{SUB_CATS[main][sub]} {sub} 상세 과제실")
             
-            # ⚙️ 실시간 세팅 제어 상자 연동 (즉시 반영 정책 준수)
             with st.expander("🛠️ 본 종목 개별 난이도/주기 설정 변경"):
                 new_lvl = st.selectbox("난이도 수정", ["초급", "중급", "고급"], index=["초급", "중급", "고급"].index(level), key=f"mod_lvl_{sub}")
                 handle_setting_change(sub, new_lvl, "sub_levels")
@@ -302,8 +311,6 @@ else:
 
             st.markdown("---")
             
-            # 💡 [업데이트 - 콜드 스타트 예외 조항 처리]
-            # active_quests에 데이터가 없으면 즉시 실시간 AI 호출을 트리거함
             if sub not in st.session_state.db["active_quests"]:
                 with st.spinner(f"AI 멘토가 '{sub}' 맞춤형 고품격 과제를 빌드하는 중..."):
                     if main == "외국어":
@@ -325,9 +332,6 @@ else:
 
             quest_data = st.session_state.db["active_quests"].get(sub)
 
-            # ------------------------------------------------
-            # 세부 종목별 UI 및 로직 핸들링 분기
-            # ------------------------------------------------
             if main == "외국어" and quest_data:
                 if sub == "영단어":
                     st.markdown("<div class='quest-card'><b>🌍 공학 기술 및 토익 필수 어휘집</b></div>", unsafe_allow_html=True)
@@ -336,20 +340,18 @@ else:
                         st.markdown(f"**{w['en']}** : {w['kr']}\n\n*💡 예문:* {w['example']}")
                         content_str += f"■ {w['en']} : {w['kr']} (예문: {w['example']})\n"
                     
-                    # 내 보관함 스크랩 연동
                     if st.button("🗂️ 본 단어장 앱 내 보관함에 스크랩 저장", key=f"scr_{sub}"):
                         st.session_state.db["archive"].append({"type": "영단어장", "date": str(datetime.date.today()), "content": content_str})
                         sync_db()
                         st.success("보관함 저장 완료!")
 
-                    # 3시간 타임락 제어 로직
                     if sub not in st.session_state.db["vocab_lock_time"]:
                         st.session_state.db["vocab_lock_time"][sub] = str(datetime.datetime.now())
                         sync_db()
                     
                     start_time = datetime.datetime.fromisoformat(st.session_state.db["vocab_lock_time"][sub])
                     elapsed = (datetime.datetime.now() - start_time).total_seconds()
-                    lock_duration = 10800 # 3시간
+                    lock_duration = 10800 
                     remains = lock_duration - elapsed
                     
                     st.write("---")
@@ -364,7 +366,6 @@ else:
                         for i, q in enumerate(quest_data.get('quizzes', [])):
                             st.radio(f"Q{i+1}. {q['question']}", q['options'], key=f"quiz_v_{i}")
                 else:
-                    # 리스닝 / 독해 일반 공통 UI
                     st.success("학습용 가이드 문서가 발급되었습니다.")
                     st.json(quest_data)
 
@@ -372,7 +373,6 @@ else:
                 st.subheader(f"💪 오늘의 추천 루틴: {quest_data.get('title')}")
                 loc_opt = st.radio("장소 선택", ["집 (맨몸)", "헬스장 (기구)"], key="workout_loc_toggle", horizontal=True)
                 
-                # 장소 변경 시 즉시 AI 파기 및 재발급
                 if "last_loc" not in st.session_state: st.session_state.last_loc = "집 (맨몸)"
                 if st.session_state.last_loc != loc_opt:
                     st.session_state.last_loc = loc_opt
@@ -405,12 +405,11 @@ else:
                         st.warning(f"🎯 실생활 액션 플랜 퀘스트: {b_data.get('action')}")
 
             elif main == "시사" and quest_data:
-                # 아침 8시 타임 해제 락 검사 (KST 기준)
                 kst_hour = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).hour
                 if kst_hour < 8:
                     st.markdown("<div class='lock-card'>⏳ <b>오늘의 최고급 시사 리포트 발행 대기 중</b><br>매일 오전 8시 정각(KST)에 AI 심층 분석 브리핑이 자동 언락됩니다.</div>", unsafe_allow_html=True)
                     if st.button("🔓 [디버그용] 8시 락 우회 강제 오픈"):
-                        kst_hour = 9 # 임의 해제
+                        kst_hour = 9 
                 
                 if kst_hour >= 8:
                     st.header(quest_data.get("headline"))
@@ -427,7 +426,6 @@ else:
                         st.success("보관함 스크랩 완료!")
 
             elif main == "코딩":
-                # 실력 진단 레벨 테스트 미이행 상태 처리
                 if f"level_certified_{sub}" not in st.session_state.db:
                     st.markdown("<div class='lock-card'>📝 <b>역량 등급 산정을 위한 정밀 레벨 테스트 필요</b><br>합리적 맞춤 과제 배정을 위해 10문항 진단을 선행합니다. (하->중->상 순차 출제)</div>", unsafe_allow_html=True)
                     
@@ -448,13 +446,11 @@ else:
                         
                         if idx < len(questions):
                             q = questions[idx]
-                            # 차등 배점 텍스트 안내 다듬기
                             st.markdown(f"### 문항 {idx+1}/10 ── 난이도: [{q.get('difficulty')}] (배점: {5 if q.get('difficulty')=='하' else 10 if q.get('difficulty')=='중' else 15}점)")
                             st.info(q.get("question"))
                             u_ans = st.radio("정답 선택", q.get("options"), key=f"test_ans_{idx}")
                             
                             if st.button("다음 문제 제출 ➡️"):
-                                # 채점 스코어링 가중치 연산
                                 if u_ans == q.get("answer"):
                                     weight = 5 if q.get('difficulty') == '하' else 10 if q.get('difficulty') == '중' else 15
                                     st.session_state.db["coding_test_score"] += weight
@@ -462,7 +458,6 @@ else:
                                 sync_db()
                                 st.rerun()
                         else:
-                            # 10문항 종료 최종 정산 및 수준 확정
                             final_score = st.session_state.db["coding_test_score"]
                             if final_score >= 81: certified_level = "고급"
                             elif final_score >= 46: certified_level = "중급"
@@ -475,12 +470,10 @@ else:
                                 st.session_state.db[f"level_certified_{sub}"] = certified_level
                                 st.session_state.db["sub_levels"][sub] = certified_level
                                 st.session_state.db["coding_test_active"] = False
-                                # 난이도가 바꼈으므로 기존 빈 퀘스트 파기
                                 if sub in st.session_state.db["active_quests"]: del st.session_state.db["active_quests"][sub]
                                 sync_db()
                                 st.rerun()
                 else:
-                    # 등급 인증 완료 후 데일리 과제 UI
                     m_data = quest_data.get("daily_mission")
                     if m_data:
                         st.subheader(f"🎯 데일리 코딩 미션: {m_data.get('title')}")
@@ -489,7 +482,7 @@ else:
                         st.caption(f"💡 전공 시니어 팁: {m_data.get('tip')}")
 
     # ==========================================
-    # 🗂️ 6. 신설: 앱 내 보관함 / 스크랩북 기능
+    # 🗂️ 6. 앱 내 보관함 / 스크랩북 기능
     # ==========================================
     with archive_tab:
         st.title("🗂️ 나의 스크랩 북")
