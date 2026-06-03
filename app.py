@@ -2,16 +2,21 @@
 # 실행 명령: pip install streamlit google-generativeai && streamlit run app.py
 
 import streamlit as st
+import google.generativeai as genai
 import json
+import datetime
 import os
-# 다른 import 문들이 있다면 그 아래에 두면 돼!
+import re
 
-# ─── 여기부터 모바일 치트키 CSS 추가 ───
+# 1. 페이지 설정은 무조건 최상단에 딱 한 번만!
 st.set_page_config(
     page_title="Daily Quest Master",
-    initial_sidebar_state="collapsed",
+    page_icon="🎯",
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
+# 2. 모바일 CSS 및 기본 UI 스타일 완벽 통합
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -22,21 +27,14 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
+        max-width: 480px; 
     }
-    div.stButton > button:first-child {
-        border-radius: 12px;
-        font-weight: bold;
-    }
+    .stButton>button { width: 100%; border-radius: 12px; font-weight: bold; height: 3.4rem; margin-bottom: 0.6rem; transition: all 0.2s ease;}
+    .icon-box { background-color: #1e293b; color: white; padding: 20px; border-radius: 16px; text-align: center; font-size: 24px; font-weight: bold; cursor: pointer; margin-bottom: 15px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
+    .quest-card { background-color: #f8f9fa; padding: 18px; border-radius: 14px; border-left: 6px solid #3b82f6; margin-bottom: 15px; color: #1e293b; }
+    .lock-card { background-color: #fef3c7; padding: 18px; border-radius: 14px; border-left: 6px solid #d97706; margin-bottom: 15px; color: #92400e; }
     </style>
-    """, unsafe_allow_html=True)
-# ─── 여기까지만 깔끔하게 넣고, 원래 네 코드는 이 아래에 그대로 두면 돼!
-
-import streamlit as st
-import google.generativeai as genai
-import json
-import datetime
-import os
-import re
+""", unsafe_allow_html=True)
 
 # ==========================================
 # 💾 1. 기기 로컬 DB 영구 저장 시스템 (파일 동기화)
@@ -79,17 +77,6 @@ if 'db' not in st.session_state:
 def sync_db():
     """세션 상태의 변화를 로컬 DB 파일에 즉시 동기화(Commit)"""
     save_local_db(st.session_state.db)
-
-# 앱 기본 모바일 레이아웃 주입
-st.set_page_config(page_title="Daily Quest Master", page_icon="🎯", layout="centered")
-st.markdown("""
-    <style>
-    .main .block-container { padding-top: 1rem; padding-bottom: 1rem; max-width: 480px; }
-    .stButton>button { width: 100%; border-radius: 12px; font-weight: bold; height: 3.4rem; margin-bottom: 0.6rem; }
-    .icon-box { background-color: #1e293b; color: white; padding: 20px; border-radius: 16px; text-align: center; font-size: 24px; font-weight: bold; cursor: pointer; margin-bottom: 15px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
-    .quest-card { background-color: #f8f9fa; padding: 18px; border-radius: 14px; border-left: 6px solid #3b82f6; margin-bottom: 15px; color: #1e293b; }
-    .lock-card { background-color: #fef3c7; padding: 18px; border-radius: 14px; border-left: 6px solid #d97706; margin-bottom: 15px; color: #92400e; }
-    </style>
 """, unsafe_allow_html=True)
 
 # 🔑 Secrets 및 API 연동
