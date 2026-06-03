@@ -1,6 +1,3 @@
-# 파일명: app.py
-# 실행 명령: pip install streamlit google-generativeai && streamlit run app.py
-
 import streamlit as st
 import google.generativeai as genai
 import json
@@ -8,7 +5,9 @@ import datetime
 import os
 import re
 
-# 1. 페이지 설정은 무조건 최상단에 딱 한 번만!
+# ==========================================
+# 🎨 [필수] 페이지 설정 및 모바일 CSS (반드시 최상단에 1번만 선언)
+# ==========================================
 st.set_page_config(
     page_title="Daily Quest Master",
     page_icon="🎯",
@@ -16,19 +15,23 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. 모바일 CSS 및 기본 UI 스타일 완벽 통합
 st.markdown("""
     <style>
+    /* 상하단 메뉴 및 워터마크 숨기기 */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* 모바일 여백 꽉 차게 최적화 */
     .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 1.5rem !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
         max-width: 480px; 
     }
+    
+    /* 버튼 및 카드 UI 디자인 통합 */
     .stButton>button { width: 100%; border-radius: 12px; font-weight: bold; height: 3.4rem; margin-bottom: 0.6rem; transition: all 0.2s ease;}
     .icon-box { background-color: #1e293b; color: white; padding: 20px; border-radius: 16px; text-align: center; font-size: 24px; font-weight: bold; cursor: pointer; margin-bottom: 15px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
     .quest-card { background-color: #f8f9fa; padding: 18px; border-radius: 14px; border-left: 6px solid #3b82f6; margin-bottom: 15px; color: #1e293b; }
@@ -66,8 +69,8 @@ if 'db' not in st.session_state:
         "selected_subs": local_data.get("selected_subs", []),
         "sub_levels": local_data.get("sub_levels", {}),
         "quest_cycles": local_data.get("quest_cycles", {}),
-        "archive": local_data.get("archive", []), # 내 보관함 데이터
-        "active_quests": local_data.get("active_quests", {}), # 현재 생성된 과제 저장
+        "archive": local_data.get("archive", []), 
+        "active_quests": local_data.get("active_quests", {}), 
         "vocab_lock_time": local_data.get("vocab_lock_time", {}),
         "coding_test_active": local_data.get("coding_test_active", False),
         "coding_test_idx": local_data.get("coding_test_idx", 0),
@@ -75,9 +78,8 @@ if 'db' not in st.session_state:
     }
 
 def sync_db():
-    """세션 상태의 변화를 로컬 DB 파일에 즉시 동기화(Commit)"""
+    # 세션 상태의 변화를 로컬 DB 파일에 즉시 동기화(Commit)
     save_local_db(st.session_state.db)
-""", unsafe_allow_html=True)
 
 # 🔑 Secrets 및 API 연동
 secret_key = st.secrets.get("api_key", "")
@@ -112,11 +114,11 @@ def get_ai_clean_json(prompt):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
-        # 정규식을 활용해 복잡한 텍스트 찌꺼기 속에서 순수 JSON 오브젝트만 정밀 추출 (PRD 5.2조 준수)
+        # 정규식을 활용해 복잡한 텍스트 찌꺼기 속에서 순수 JSON 오브젝트만 정밀 추출 (마크다운 방어 추가)
         json_match = re.search(r"\{.*\}", response.text.strip(), re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
-        return json.loads(response.text.strip())
+        return json.loads(response.text.replace('```json', '').replace('```', '').strip())
     except Exception as e:
         st.error(f"AI 데이터 모델 빌드 에러: {e}")
         return None
@@ -143,7 +145,7 @@ def ai_agent_hub(sub, level, opt=""):
 # ⚙️ 3. 설정 변경 즉시 반영(Invalidate) 정책 엔진
 # ==========================================
 def handle_setting_change(sub, new_val, setting_type):
-    """주기, 수준 변경 등 설정이 바뀌는 즉시 기존 과제를 폭파하고 재생성 (PRD 2.3조)"""
+    # 주기, 수준 변경 등 설정이 바뀌는 즉시 기존 과제를 폭파하고 재생성 (PRD 2.3조)
     current_setting = st.session_state.db[setting_type].get(sub)
     if current_setting != new_val:
         st.session_state.db[setting_type][sub] = new_val
@@ -317,7 +319,7 @@ else:
                         st.session_state.db["active_quests"][sub] = ai_agent_hub(sub, level)
                     elif main == "코딩":
                         st.session_state.db["active_quests"][sub] = {
-                            "daily_mission": ai_agent_hub(sub, level, opt="미mission" if sub != "파이썬" else "미션")
+                            "daily_mission": ai_agent_hub(sub, level, opt="미션")
                         }
                     sync_db()
 
@@ -460,7 +462,7 @@ else:
                                 sync_db()
                                 st.rerun()
                         else:
-                            # 10문항 종료 최종 정산 및 수준 확정 (PRD 커트라인 준수)
+                            # 10문항 종료 최종 정산 및 수준 확정
                             final_score = st.session_state.db["coding_test_score"]
                             if final_score >= 81: certified_level = "고급"
                             elif final_score >= 46: certified_level = "중급"
