@@ -82,7 +82,7 @@ SUB_CATS = {
 SUB_TO_MAIN = {sub: main for main, subs in SUB_CATS.items() for sub in subs}
 
 # ==========================================
-# 📦 2. 고품격 고정형 마스터 더미 데이터셋 (초고속 0초 응답 서버)
+# 📦 2. 고품격 고정형 마스터 더미 데이터셋 (0초 응답)
 # ==========================================
 def get_dummy_data(sub, level, opt=""):
     main = SUB_TO_MAIN[sub]
@@ -99,7 +99,7 @@ def get_dummy_data(sub, level, opt=""):
             "quizzes": [
                 {"question": "교류 회로에서 복소수 형태로 표현되는 전체 저항 성분을 뜻하는 단어는?", "options": ["Impedance", "Capacitance", "Inductance", "Admittance"], "answer": "Impedance"},
                 {"question": "주식 마켓에서 가격이 급격하게 요동치는 성질을 뜻하는 단어는?", "options": ["Liquidity", "Volatility", "Sustainability", "Flexibility"], "answer": "Volatility"},
-                {"question": "대칭의 반대말로, 양쪽의 형태나 성질이 서로 다른 것을 뜻하는 영단어는?", "options": ["Symmetric", "Asymmetric", "Geetric", "Parametric"], "answer": "Asymmetric"}
+                {"question": "대칭의 반대말로, 양쪽의 형태나 성질이 서로 다른 것을 뜻하는 영단어는?", "options": ["Symmetric", "Asymmetric", "Geometric", "Parametric"], "answer": "Asymmetric"}
             ]
         }
     elif main == "운동":
@@ -132,7 +132,7 @@ def get_dummy_data(sub, level, opt=""):
         return {
             "headline": "🚨 VIP 시사 리포트: 중동 리스크와 테크 자산 공급망 나비효과 분석",
             "summary": "1. 이란-미국 지정학적 갈등 고조로 인한 국제 유가 변동성 급증\n2. 글로벌 반도체 및 AI 하드웨어 서플라이 체인 병목 현상 우려\n3. 마이크로소프트, 알파벳, 넷플릭스 등 빅테크 주가의 금리 및 매크로 민감도 증대",
-            "deep_dive": "최근 이란과 미국의 갈등 격화는 단순한 군사적 긴장감을 넘어 글로벌 반도체 장비 및 AI 데이터센터 공급망에 치명적인 나비효과를 유발하고 있습니다. 특히 에너지 가격 상승은 대규모 서버 인프라를 가동하는 Microsoft와 Alphabet(구글)의 데이터센터 운영 비용 압박으로 직결됩니다. 더불어 반도체 섹터의 핵심 후공정 패키징 라인이 밀집된 아시아-유럽 물류 항로가 차단될 조짐을 보이면서 공급 부족 우려가 심화되고 있습니다. 반면, 이러한 공급망 충격 속에서도 실적 가시성이 확보된 AI 핵심 기술 보유 대형 Tech 기업들로 자산 배분이 쏠리는 현상이 관측됩니다.",
+            "deep_dive": "최근 이란과 미국의 갈등 격화는 단순한 군사적 긴장감을 넘어 글로벌 반도체 장비 및 AI 데이터센터 공급망에 치명적인 나비효과를 유발하고 있습니다. 특히 에너지 가격 상승은 대규모 서버 인프라를 가동하는 Microsoft와 Alphabet(구글)의 데이터센터 운영 비용 압박으로 직결됩니다. 더불어 반도체 섹터의 핵심 후공정 패키징 라인이 밀집된 아시아-유럽 물류 항로가 차단될 조짐을 보이면서 공급 공급 부족 우려가 심화되고 있습니다. 반면, 이러한 공급망 충격 속에서도 실적 가시성이 확보된 AI 핵심 기술 보유 대형 Tech 기업들로 자산 배분이 쏠리는 현상이 관측됩니다.",
             "impact": "에너지 가격 폭등이 장기화될 경우 테크 섹터 내에서도 옥석 가리기가 심화될 것이며, 단기적으로 AI 인프라 자본 지출(CapEx)의 효율성이 높은 기업 중심으로 포트폴리오를 재편하는 전략이 유효합니다."
         }
     elif main == "코딩" and opt == "테스트":
@@ -281,7 +281,7 @@ else:
             st.title(f"{SUB_CATS[main][sub]} {sub} 상세 과제실")
             st.markdown("---")
             
-            # 🚨 [기획 완벽 유지] 코딩 대분류 전용 10문항 정밀 레벨 테스트 레이어
+            # 🚨 코딩 대분류 전용 10문항 정밀 레벨 테스트 레이어
             if main == "코딩" and f"level_certified_{sub}" not in st.session_state.db:
                 st.markdown("<div class='lock-card'>📝 <b>역량 등급 산정을 위한 정밀 레벨 테스트 필요</b><br>합리적 맞춤 과제 배정을 위해 10문항 진단을 선행합니다. (하->중->상 순차 출제)</div>", unsafe_allow_html=True)
                 
@@ -331,7 +331,7 @@ else:
                             st.rerun()
             
             else:
-                # 0초 만에 데이터를 가져오는 마스터 동기화 로직
+                # 0초 만에 데이터를 동기화하는 로직
                 if sub not in st.session_state.db["active_quests"]:
                     if main == "외국어": st.session_state.db["active_quests"][sub] = get_dummy_data(sub, level)
                     elif main == "운동": st.session_state.db["active_quests"][sub] = get_dummy_data(sub, level, opt="집 (맨몸)")
@@ -341,12 +341,12 @@ else:
                             "book_data": get_dummy_data(sub, level, opt="추천")
                         }
                     elif main == "시사": st.session_state.db["active_quests"][sub] = get_dummy_data(sub, level)
-                    elif main == "coding": pass
                     elif main == "코딩": st.session_state.db["active_quests"][sub] = {"daily_mission": get_dummy_data(sub, level, opt="미션")}
                     sync_db()
 
                 quest_data = st.session_state.db["active_quests"].get(sub)
 
+                # 🔥 [수정 완료] 순서가 완벽하게 교정된 조건문 렌더링 분기 파트
                 if main == "외국어" and quest_data:
                     if sub == "영단어":
                         st.markdown("<div class='quest-card'><b>🌍 공학 기술 및 토익 필수 어휘집</b></div>", unsafe_allow_html=True)
@@ -375,9 +375,9 @@ else:
                         else:
                             st.subheader("🌙 2단계: 암기 검증 미니 퀴즈")
                             for i, q in enumerate(quest_data.get('quizzes', [])): st.radio(f"Q{i+1}. {q['question']}", q['options'], key=f"quiz_v_{i}")
-                else:
-                    st.success("학습용 가이드 문서가 발급되었습니다.")
-                    st.json(quest_data)
+                    else:
+                        st.success("학습용 가이드 문서가 발급되었습니다.")
+                        st.json(quest_data)
 
                 elif main == "운동" and quest_data:
                     st.subheader(f"💪 오늘의 추천 루틴: {quest_data.get('title')}")
