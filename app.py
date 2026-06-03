@@ -2,6 +2,36 @@
 # 실행 명령: pip install streamlit google-generativeai && streamlit run app.py
 
 import streamlit as st
+import json
+import os
+# 다른 import 문들이 있다면 그 아래에 두면 돼!
+
+# ─── 여기부터 모바일 치트키 CSS 추가 ───
+st.set_page_config(
+    page_title="Daily Quest Master",
+    initial_sidebar_state="collapsed",
+)
+
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 1.5rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    div.stButton > button:first-child {
+        border-radius: 12px;
+        font-weight: bold;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+# ─── 여기까지만 깔끔하게 넣고, 원래 네 코드는 이 아래에 그대로 두면 돼!
+
+import streamlit as st
 import google.generativeai as genai
 import json
 import datetime
